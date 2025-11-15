@@ -1,0 +1,82 @@
+# ...existing code...
+import streamlit as st
+import pandas as pd
+from pathlib import Path
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+
+# -----------------------------------------------
+# 🎓 EduBot - corrected
+# -----------------------------------------------
+
+# STEP 1: Load Dataset (use safe path)
+try:
+    
+    df = pd.read_csv("/Users/aditi/Documents/SEM 5/AIML AAT/edubot.csv")
+    assert 'Patterns' in df.columns and 'Responses' in df.columns, "CSV must have 'Patterns' and 'Responses' columns."
+except Exception as e:
+    st.error(f"Error loading CSV file: {e}")
+    st.stop()
+
+# STEP 2: Prepare Pattern-Response Mapping (robust to NaN/empty)
+pattern_response = []
+for _, row in df.iterrows():
+    raw = row.get('Patterns', '')
+    if pd.isna(raw) or str(raw).strip() == "":
+        continue
+    for p in str(raw).split(','):
+        pat = p.strip()
+        if not pat:
+            continue
+        pattern_response.append((pat, row.get('Responses', '')))
+
+patterns = [pr[0] for pr in pattern_response]
+responses = [pr[1] for pr in pattern_response]
+
+if not patterns:
+    st.error("No valid patterns found in CSV. Ensure 'Patterns' column contains comma-separated patterns.")
+    st.stop()
+
+# STEP 3: TF-IDF Vectorization
+vectorizer = TfidfVectorizer()
+X = vectorizer.fit_transform(patterns)
+
+# STEP 4: Chatbot Response Function (with low-similarity fallback)
+def chatbot_response(user_input, threshold=0.2):
+    if not user_input or str(user_input).strip() == "":
+        return "Please type a question."
+    user_vec = vectorizer.transform([user_input])
+    similarity = cosine_similarity(user_vec, X).flatten()
+    best_idx = int(similarity.argmax())
+    if similarity[best_idx] < threshold:
+        return "Sorry, I didn't understand that. Could you rephrase?"
+    return responses[best_idx]
+
+# STEP 5: Streamlit UI Configuration
+st.set_page_config(page_title="EduBot - College Chatbot", page_icon="🎓", layout="centered")
+st.title("🎓 EduBot - Your College Assistant")
+st.write("Hi! I’m *EduBot*, here to answer your college-related queries. Ask me anything about college timings, exams, or facilities!")
+
+# Initialize chat history
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
+
+# STEP 6: Chat Input
+user_input = st.chat_input("Type your question here...")
+
+if user_input:
+    if user_input.lower().strip() in ['bye', 'exit', 'quit']:
+        response = "Goodbye! Have a wonderful day 🎓"
+    else:
+        response = chatbot_response(user_input)
+
+    st.session_state.chat_history.append(("You", user_input))
+    st.session_state.chat_history.append(("EduBot", response))
+
+# STEP 7: Display Chat History (fixed markdown)
+for sender, message in st.session_state.chat_history:
+    if sender == "You":
+        st.markdown(f"🧑‍💻 **{sender}:** {message}")
+    else:
+        st.markdown(f"🤖 **{sender}:** {message}")
+# ...existing code...
